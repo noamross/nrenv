@@ -1,4 +1,4 @@
-FROM rocker/r-ver:4.6.0
+FROM rocker/r-ver:latest
 
 # dpkg: skip docs/man/locale for everything we install.
 RUN mkdir -p /etc/dpkg/dpkg.cfg.d && \

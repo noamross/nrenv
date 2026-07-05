@@ -1,0 +1,153 @@
+name: Build CI Image
+
+on:
+  push:
+    paths:
+      - 'Dockerfile'
+      - 'apt-packages.txt'
+      - '.github/workflows/build-gw-image.yml'
+    branches: [main]
+  pull_request:
+    paths:
+      - 'Dockerfile'
+      - 'apt-packages.txt'
+      - '.github/workflows/build-gw-image.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+
+  # Compute the image tag and per-platform cache-scope prefix once; both the
+  # build matrix and merge job depend on these outputs.
+  setup:
+    runs-on: ubuntu-slim
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      cache-scope: ${{ steps.meta.outputs.cache-scope }}
+    steps:
+      - name: Compute image tag and cache scope
+        id: meta
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            SLUG=$(echo "$HEAD_REF" | sed 's/[^a-zA-Z0-9._-]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
+            echo "tag=${SLUG}" >> "$GITHUB_OUTPUT"
+            echo "cache-scope=pr-${SLUG}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=latest" >> "$GITHUB_OUTPUT"
+            echo "cache-scope=main" >> "$GITHUB_OUTPUT"
+          fi
+
+  # Build each platform in a separate job so amd64 and arm64 run in parallel
+  # rather than sequentially. Both jobs run on standard amd64 runners; arm64
+  # is emulated via QEMU. Each job pushes its image by content-addressed digest
+  # (no tag yet) and uploads the digest string as an artifact for the merge job
+  # to assemble into the final multi-arch manifest.
+  build:
+    needs: setup
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            qemu: false
+          - platform: linux/arm64
+            qemu: true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Derive platform pair name (linux/amd64 → linux-amd64)
+        run: echo "PLATFORM_PAIR=${PLATFORM//\//-}" >> "$GITHUB_ENV"
+        env:
+          PLATFORM: ${{ matrix.platform }}
+
+      - uses: docker/setup-qemu-action@v4
+        if: matrix.qemu
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,name=ghcr.io/${{ github.repository }}/gwimg,push-by-digest=true,name-canonical=true,push=true
+          # Scope key = branch-scope + platform + content hash of the files that
+          # affect the image. Same content → same scope → guaranteed cache hit.
+          # Changed files → new scope → cold build (no stale layers).
+          # PR builds read from both the branch scope and main as a fallback.
+          # PR builds also write to the main scope so a post-merge rebuild on
+          # main with identical files finds the cache already warm. On main,
+          # only one cache-to entry is emitted (BuildKit rejects duplicates).
+          cache-from: |
+            type=gha,scope=${{ needs.setup.outputs.cache-scope }}-${{ env.PLATFORM_PAIR }}-${{ hashFiles('Dockerfile', 'apt-packages.txt') }}
+            type=gha,scope=main-${{ env.PLATFORM_PAIR }}-${{ hashFiles('Dockerfile', 'apt-packages.txt') }}
+          cache-to: |
+            type=gha,mode=max,scope=${{ needs.setup.outputs.cache-scope }}-${{ env.PLATFORM_PAIR }}-${{ hashFiles('Dockerfile', 'apt-packages.txt') }}
+            ${{ github.event_name == 'pull_request' && format('type=gha,mode=max,scope=main-{0}-{1}', env.PLATFORM_PAIR, hashFiles('Dockerfile', 'apt-packages.txt')) || '' }}
+
+      # amd64 is the platform consuming repos run on, so tag it immediately so
+      # they don't have to wait for the arm64 build. The merge job will
+      # overwrite these tags with the full multi-arch manifest once arm64 is done.
+      - name: Tag amd64 image immediately
+        if: matrix.platform == 'linux/amd64'
+        run: |
+          docker buildx imagetools create \
+            -t ghcr.io/${{ github.repository }}/gwimg:${{ needs.setup.outputs.tag }} \
+            -t ghcr.io/${{ github.repository }}/gwimg:${{ github.sha }} \
+            ghcr.io/${{ github.repository }}/gwimg@${{ steps.build.outputs.digest }}
+
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: digests-${{ env.PLATFORM_PAIR }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # Download both platform digests and combine them into a single multi-arch
+  # manifest list under the final image tags.
+  merge:
+    needs: [setup, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: /tmp/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create and push multi-arch manifest
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create \
+            -t ghcr.io/${{ github.repository }}/gwimg:${{ needs.setup.outputs.tag }} \
+            -t ghcr.io/${{ github.repository }}/gwimg:${{ github.sha }} \
+            $(printf 'ghcr.io/${{ github.repository }}/gwimg@sha256:%s ' *)

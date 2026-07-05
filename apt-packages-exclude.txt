@@ -1,0 +1,11 @@
+# Packages that may be installed at runtime but should NOT trigger a PR to
+# add them to the image. One package per line; lines starting with # are ignored.
+#
+# Use this for packages that are intentionally transient, caller-specific, or
+# already satisfied by another mechanism in the image.
+#
+# Example: pandoc is excluded here because the image satisfies it via Quarto's
+# bundled binary — the Posit sysreqs API still lists it for rmarkdown/knitr, but
+# it gets filtered out before install by the action's exclude-apt-packages input,
+# so it never reaches the PR step anyway. Listed here as documentation.
+pandoc

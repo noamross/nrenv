@@ -1,0 +1,51 @@
+# Example CI workflow for a repo that consumes the Grant Watch image + action.
+# Copy into the consuming repo as .github/workflows/ci.yml and replace <OWNER>.
+#
+# The job's `container:` is what hosts every step in the image — checkout, the
+# setup-gw-deps action, and all of your repo-specific steps run inside it.
+name: Example CI with Quarto
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read   # needed to pull the image from GHCR
+  actions: write   # lets setup-gw-deps purge superseded renv caches
+
+env:
+  # Fine-grained PAT with contents:write + pull-requests:write on
+  # noamross/nrenv. Store it as a repo secret named NRENV_WRITE_TOKEN.
+  # Without it, setup-gw-deps still runs but won't open PRs for new sysdeps.
+  NRENV_WRITE_TOKEN: ${{ secrets.NRENV_WRITE_TOKEN }}
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/noamross/nrenv/gwimg:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Grant Watch dependencies
+        id: gwdeps
+        uses: noamross/nrenv/.github/actions/setup-gw-deps@main
+        with:
+          # Anything this repo needs beyond the renv.lock sysreqs:
+          extra-apt-packages: ""
+          # lockfile: renv.lock   # override if not at the repo root
+          nrenv-token: ${{ secrets.NRENV_WRITE_TOKEN }}
+          # Persist Quarto's freeze directory across runs so unchanged documents
+          # don't re-execute their R chunks. One path per line; the cache is
+          # restored from the most recent run and re-saved every run.
+          cache-dirs: example/_freeze
+
+      # ---- repo-specific steps below; all run inside the image ----
+      - name: Render
+        run: quarto render example
+
+      - name: Test
+        run: Rscript -e 'uuid::UUIDgenerate(n = 10)'

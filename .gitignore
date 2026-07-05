@@ -1,0 +1,8 @@
+# Quarto render artifacts for the example project. `_freeze/` is intentionally
+# not committed — the setup-gw-deps action's cache-dirs input persists it across
+# CI runs instead (see .github/workflows/example-ci.yml).
+example/_freeze/
+example/_site/
+example/.quarto/
+example/*.html
+example/*_files/

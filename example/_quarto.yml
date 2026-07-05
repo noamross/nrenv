@@ -1,0 +1,11 @@
+# Tiny Quarto project used to demonstrate the setup-gw-deps action, including
+# `_freeze` caching. `freeze: auto` makes Quarto store each document's executed
+# results under `_freeze/` and reuse them while the source is unchanged — so the
+# expensive R chunks only run again when a .qmd actually changes. The action's
+# `cache-dirs` input persists `_freeze/` across CI runs (see example-ci.yml), so
+# this directory does not need to be committed.
+project:
+  title: nrenv-example
+
+execute:
+  freeze: auto

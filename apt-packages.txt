@@ -1,0 +1,37 @@
+# System packages baked into the CI image.
+# One package per line; lines starting with # are ignored.
+# Edit this file and rebuild the image (build-gw-image.yml) to add/remove packages.
+# The setup-gw-deps action opens a PR to add here any package it installs at
+# runtime — merge that PR and rebuild to promote it into the image.
+ca-certificates
+cmake
+curl
+gdal-bin
+gh
+git
+jq
+libabsl-dev
+libcurl4-openssl-dev
+libfontconfig1-dev
+libfreetype6-dev
+libfribidi-dev
+libgdal-dev
+libgeos-dev
+libglpk-dev
+libharfbuzz-dev
+libjpeg-dev
+libpoppler-cpp-dev
+libproj-dev
+libprotobuf-dev
+libsodium-dev
+libsqlite3-dev
+libssl-dev
+libudunits2-dev
+libv8-dev
+libx11-dev
+make
+openssh-client
+protobuf-compiler
+rsync
+xz-utils
+zstd

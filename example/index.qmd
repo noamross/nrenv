@@ -1,0 +1,22 @@
+---
+title: "A test"
+author: "A person"
+date: "A time"
+---
+
+A bit of text.
+
+```{r}
+library(tidyverse)
+library(sf)
+library(V8)
+library(tidymodels)
+cat("A string of data")
+```
+
+```{r}
+# sodium requires libsodium-dev — used to test that setup-gw-deps detects and
+# proposes missing system dependencies via PR.
+library(sodium)
+sodium::random(10)
+```

@@ -1,0 +1,182 @@
+name: Set up Grant Watch dependencies
+description: >
+  Run inside the Grant Watch CI image. Installs any system (apt) and R
+  dependencies declared in renv.lock that aren't already baked into the image,
+  with persistent GitHub caches for the renv source cache and the renv project
+  library. Call it as the first step of a job whose `container:` is the Grant
+  Watch image; the job's remaining steps then run in the same image with all
+  dependencies ready.
+
+  It can also cache arbitrary build-output directories (e.g. Quarto's `_freeze`)
+  with a rolling, most-recent-wins strategy via the `cache-dirs` input. Unlike
+  the renv caches — keyed on the lockfile so they only re-save when dependencies
+  change — these restore the most recent prior cache and save a fresh one every
+  run, so outputs accumulate across runs.
+
+  It also purges superseded caches (keeping the newest per prefix). That step
+  needs `actions: write` on the calling job's GITHUB_TOKEN; without it the purge
+  is skipped with a notice (e.g. on fork pull requests).
+
+inputs:
+  lockfile:
+    description: Path to renv.lock, relative to the workspace.
+    required: false
+    default: renv.lock
+  extra-apt-packages:
+    description: >
+      Extra apt packages to install on top of the renv.lock sysreqs
+      (space or newline separated).
+    required: false
+    default: ""
+  exclude-apt-packages:
+    description: >
+      apt packages the sysreqs API may list but the image satisfies by other
+      means, so they're never installed (space or newline separated). Defaults
+      to "pandoc" — Quarto bundles its own, so rmarkdown/knitr's sysreq won't
+      pull ~190 MB of apt pandoc on every run.
+    required: false
+    default: pandoc
+  r-lib:
+    description: Target R library path. Defaults to the renv project library.
+    required: false
+    default: ""
+  ubuntu-release:
+    description: >
+      Ubuntu release used for the Posit sysreqs lookup. Defaults to the image's
+      own release (from /etc/os-release).
+    required: false
+    default: ""
+  cache-dirs:
+    description: >
+      Extra directories to cache with a rolling, most-recent-wins strategy (one
+      path per line). Unlike the renv caches — keyed on the lockfile hash, so
+      they only re-save when dependencies change — these save a fresh cache on
+      every run and restore from the most recent prior run, so build outputs
+      accumulate across runs. Checkout and build steps may overwrite restored
+      files; whatever is on disk at the end of the job is saved. The canonical
+      use is Quarto's `_freeze` directory. Leave empty to disable.
+    required: false
+    default: ""
+  cache-key-prefix:
+    description: Prefix for all cache keys. Bump it to invalidate the caches.
+    required: false
+    default: gw-v1
+  purge-stale-caches:
+    description: >
+      Delete superseded renv caches (keeping the newest per prefix) to stay
+      under the repo cache limit. Needs `actions: write`. Set to "false" to skip.
+    required: false
+    default: "true"
+  github-token:
+    description: >
+      Token used to list/delete caches. Defaults to the job's GITHUB_TOKEN,
+      which must have `actions: write` for the purge to run.
+    required: false
+    default: ""
+  nrenv-token:
+    description: >
+      Token with `contents: write` and `pull-requests: write` on the nrenv
+      repo. When provided, the action opens a PR on nrenv to promote any
+      runtime-installed system packages into apt-packages.txt (and the image).
+      Omit or leave empty to skip that step.
+    required: false
+    default: ""
+
+outputs:
+  installed-sysdeps:
+    description: >
+      Space-separated apt packages that were installed on top of the image
+      (i.e. candidates to promote into the Dockerfile). Empty if none.
+    value: ${{ steps.deps.outputs.installed-sysdeps }}
+
+runs:
+  using: composite
+  steps:
+    # Both caches key on the lockfile hash (no run id), so a new cache is saved
+    # ONLY when dependencies actually change. restore-keys fall back to the most
+    # recent cache for this OS/arch, so a changed lockfile still builds on the
+    # last one instead of starting cold.
+    - name: Cache renv source cache
+      id: renv_cache
+      uses: actions/cache@v5
+      with:
+        path: ~/.cache/R/renv
+        key: ${{ inputs.cache-key-prefix }}-renv-cache-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles(inputs.lockfile) }}
+        restore-keys: |
+          ${{ inputs.cache-key-prefix }}-renv-cache-${{ runner.os }}-${{ runner.arch }}-
+
+    - name: Cache renv project library
+      id: renv_lib
+      uses: actions/cache@v5
+      with:
+        path: renv/library
+        key: ${{ inputs.cache-key-prefix }}-renv-lib-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles(inputs.lockfile) }}
+        restore-keys: |
+          ${{ inputs.cache-key-prefix }}-renv-lib-${{ runner.os }}-${{ runner.arch }}-
+
+    # Rolling cache for arbitrary build-output directories (e.g. Quarto's
+    # `_freeze`). The key includes the run id + attempt, so it is unique per run:
+    # the exact key never hits on restore, restore-keys pulls the most recent
+    # prior cache, and the post-step always saves a fresh cache capturing this
+    # run's updates. Older caches are removed by the purge step below.
+    - name: Cache extra build directories
+      id: cache_dirs
+      if: ${{ inputs.cache-dirs != '' }}
+      uses: actions/cache@v5
+      with:
+        path: ${{ inputs.cache-dirs }}
+        key: ${{ inputs.cache-key-prefix }}-dirs-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
+        restore-keys: |
+          ${{ inputs.cache-key-prefix }}-dirs-${{ runner.os }}-${{ runner.arch }}-
+
+    - name: Install system + R dependencies
+      id: deps
+      shell: bash
+      env:
+        LOCKFILE: ${{ inputs.lockfile }}
+        R_LIB: ${{ inputs.r-lib }}
+        EXTRA_APT_PACKAGES: ${{ inputs.extra-apt-packages }}
+        EXCLUDE_APT_PACKAGES: ${{ inputs.exclude-apt-packages }}
+        UBUNTU_RELEASE: ${{ inputs.ubuntu-release }}
+      run: bash "${GITHUB_ACTION_PATH}/install-gw-deps.sh"
+
+    # When packages were installed at runtime (not yet in the image), open a PR
+    # on the nrenv repo to add them to apt-packages.txt so they get baked in on
+    # the next image build.
+    #
+    # Token resolution order:
+    #   1. nrenv-token input (explicit override)
+    #   2. NRENV_WRITE_TOKEN env var (set at workflow level in the calling repo)
+    # If neither is present the script emits a notice and exits cleanly.
+    - name: Propose new system deps to nrenv
+      if: steps.deps.outputs.installed-sysdeps != ''
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.nrenv-token != '' && inputs.nrenv-token || env.NRENV_WRITE_TOKEN }}
+        NEW_PKGS: ${{ steps.deps.outputs.installed-sysdeps }}
+        CALLING_REPO: ${{ github.repository }}
+        CALLING_SHA: ${{ github.sha }}
+        # GITHUB_ACTION_REPOSITORY is set by the runner but not forwarded into
+        # Docker container steps automatically — pass it explicitly.
+        GITHUB_ACTION_REPOSITORY: ${{ github.action_repository }}
+      run: bash "${GITHUB_ACTION_PATH}/propose-sysdeps.sh"
+
+    # Keep the newest cache per prefix on this ref and delete older ones. Runs
+    # before this run's own cache upload (composite actions have no post step),
+    # which is safe: it only deletes caches older than the newest that already
+    # exists, so a cache is purged only after its replacement has been uploaded.
+    - name: Purge superseded caches
+      if: ${{ inputs.purge-stale-caches == 'true' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token != '' && inputs.github-token || github.token }}
+        PREFIX: ${{ inputs.cache-key-prefix }}
+        OSARCH: ${{ runner.os }}-${{ runner.arch }}
+        CACHE_DIRS: ${{ inputs.cache-dirs }}
+      run: |
+        prefixes=(
+          "${PREFIX}-renv-cache-${OSARCH}-"
+          "${PREFIX}-renv-lib-${OSARCH}-"
+        )
+        [ -n "${CACHE_DIRS}" ] && prefixes+=("${PREFIX}-dirs-${OSARCH}-")
+        bash "${GITHUB_ACTION_PATH}/purge-stale-caches.sh" "${prefixes[@]}"

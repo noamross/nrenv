@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# install-gw-deps.sh — driver for the setup-gw-deps composite action.
+# install-nr-deps.sh — driver for the setup-nr-deps composite action.
 #
 # Runs inside the Grant Watch CI image and:
 #   1. Resolves the apt system dependencies for every package in renv.lock via

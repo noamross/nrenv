@@ -1,4 +1,4 @@
-# Tiny Quarto project used to demonstrate the setup-gw-deps action, including
+# Tiny Quarto project used to demonstrate the setup-nr-deps action, including
 # `_freeze` caching. `freeze: auto` makes Quarto store each document's executed
 # results under `_freeze/` and reuse them while the source is unchanged — so the
 # expensive R chunks only run again when a .qmd actually changes. The action's

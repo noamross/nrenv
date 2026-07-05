@@ -15,7 +15,7 @@ cat("A string of data")
 ```
 
 ```{r}
-# sodium requires libsodium-dev — used to test that setup-gw-deps detects and
+# sodium requires libsodium-dev — used to test that setup-nr-deps detects and
 # proposes missing system dependencies via PR.
 library(sodium)
 sodium::random(10)

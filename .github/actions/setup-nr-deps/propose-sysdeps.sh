@@ -4,7 +4,7 @@ set -euo pipefail
 # propose-sysdeps.sh — opens a PR on the nrenv repo to promote newly-detected
 # system packages into apt-packages.txt (and thus into the Docker image).
 #
-# Called by the setup-gw-deps composite action when packages are installed at
+# Called by the setup-nr-deps composite action when packages are installed at
 # runtime that are not yet baked into the image.
 #
 # Env vars (set by action.yml):

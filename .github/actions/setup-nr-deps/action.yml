@@ -60,7 +60,7 @@ inputs:
   cache-key-prefix:
     description: Prefix for all cache keys. Bump it to invalidate the caches.
     required: false
-    default: gw-v1
+    default: nr-v1
   purge-stale-caches:
     description: >
       Delete superseded renv caches (keeping the newest per prefix) to stay
@@ -138,7 +138,7 @@ runs:
         EXTRA_APT_PACKAGES: ${{ inputs.extra-apt-packages }}
         EXCLUDE_APT_PACKAGES: ${{ inputs.exclude-apt-packages }}
         UBUNTU_RELEASE: ${{ inputs.ubuntu-release }}
-      run: bash "${GITHUB_ACTION_PATH}/install-gw-deps.sh"
+      run: bash "${GITHUB_ACTION_PATH}/install-nr-deps.sh"
 
     # When packages were installed at runtime (not yet in the image), open a PR
     # on the nrenv repo to add them to apt-packages.txt so they get baked in on

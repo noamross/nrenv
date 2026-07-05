@@ -1,7 +1,7 @@
 # System packages baked into the CI image.
 # One package per line; lines starting with # are ignored.
-# Edit this file and rebuild the image (build-gw-image.yml) to add/remove packages.
-# The setup-gw-deps action opens a PR to add here any package it installs at
+# Edit this file and rebuild the image (build-nr-image.yml) to add/remove packages.
+# The setup-nr-deps action opens a PR to add here any package it installs at
 # runtime — merge that PR and rebuild to promote it into the image.
 ca-certificates
 cmake

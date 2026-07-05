@@ -36,7 +36,7 @@ RUN ARCH="$(dpkg --print-architecture)" && \
 
 # System packages — rebuilt only when apt-packages.txt changes.
 # apt-packages.txt at the repo root is the canonical list; edit it (not here)
-# to add/remove packages. The setup-gw-deps action opens a PR to add any
+# to add/remove packages. The setup-nr-deps action opens a PR to add any
 # package it installs at runtime.
 COPY apt-packages.txt /tmp/apt-packages.txt
 RUN apt-get update && \

@@ -5,13 +5,13 @@ on:
     paths:
       - 'Dockerfile'
       - 'apt-packages.txt'
-      - '.github/workflows/build-gw-image.yml'
+      - '.github/workflows/build-nr-image.yml'
     branches: [main]
   pull_request:
     paths:
       - 'Dockerfile'
       - 'apt-packages.txt'
-      - '.github/workflows/build-gw-image.yml'
+      - '.github/workflows/build-nr-image.yml'
   workflow_dispatch:
 
 permissions:
@@ -85,7 +85,7 @@ jobs:
           context: .
           file: Dockerfile
           platforms: ${{ matrix.platform }}
-          outputs: type=image,name=ghcr.io/${{ github.repository }}/gwimg,push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,name=ghcr.io/${{ github.repository }}/nrimg,push-by-digest=true,name-canonical=true,push=true
           # Scope key = branch-scope + platform + content hash of the files that
           # affect the image. Same content → same scope → guaranteed cache hit.
           # Changed files → new scope → cold build (no stale layers).
@@ -107,9 +107,9 @@ jobs:
         if: matrix.platform == 'linux/amd64'
         run: |
           docker buildx imagetools create \
-            -t ghcr.io/${{ github.repository }}/gwimg:${{ needs.setup.outputs.tag }} \
-            -t ghcr.io/${{ github.repository }}/gwimg:${{ github.sha }} \
-            ghcr.io/${{ github.repository }}/gwimg@${{ steps.build.outputs.digest }}
+            -t ghcr.io/${{ github.repository }}/nrimg:${{ needs.setup.outputs.tag }} \
+            -t ghcr.io/${{ github.repository }}/nrimg:${{ github.sha }} \
+            ghcr.io/${{ github.repository }}/nrimg@${{ steps.build.outputs.digest }}
 
       - name: Export digest
         run: |
@@ -148,6 +148,6 @@ jobs:
         working-directory: /tmp/digests
         run: |
           docker buildx imagetools create \
-            -t ghcr.io/${{ github.repository }}/gwimg:${{ needs.setup.outputs.tag }} \
-            -t ghcr.io/${{ github.repository }}/gwimg:${{ github.sha }} \
-            $(printf 'ghcr.io/${{ github.repository }}/gwimg@sha256:%s ' *)
+            -t ghcr.io/${{ github.repository }}/nrimg:${{ needs.setup.outputs.tag }} \
+            -t ghcr.io/${{ github.repository }}/nrimg:${{ github.sha }} \
+            $(printf 'ghcr.io/${{ github.repository }}/nrimg@sha256:%s ' *)

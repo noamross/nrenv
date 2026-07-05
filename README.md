@@ -27,14 +27,14 @@ jobs:
   ci:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/noamross/nrenv/gwimg:latest  # Your action runs in this image
+      image: ghcr.io/noamross/nrenv/nrimg:latest  # Your action runs in this image
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v6
 
-      - uses: noamross/nrenv/.github/actions/setup-gw-deps@main # This does your setup based on your renv.lock
+      - uses: noamross/nrenv/.github/actions/setup-nr-deps@main # This does your setup based on your renv.lock
         with:
           exclude-apt-packages: pandoc # packages you don't want to trigger warnings/PRs over
 
@@ -79,7 +79,7 @@ The [`example/`](example/) directory is a tiny Quarto project demonstrating
 this, wired up in [`example-ci.yml`](.github/workflows/example-ci.yml):
 
 ```yaml
-- uses: noamross/nrenv/.github/actions/setup-gw-deps@main
+- uses: noamross/nrenv/.github/actions/setup-nr-deps@main
   with:
     cache-dirs: example/_freeze   # one path per line for multiple
 ```
@@ -99,7 +99,7 @@ To upgrade Quarto, bump `QUARTO_VERSION` in the `Dockerfile`.
 | `extra-apt-packages` | — | Extra apt packages beyond the renv.lock sysreqs |
 | `exclude-apt-packages` | `pandoc` | Packages the sysreqs API lists but the image already satisfies |
 | `cache-dirs` | — | Extra directories to cache with a rolling, most-recent-wins strategy (one path per line), e.g. Quarto's `_freeze` |
-| `cache-key-prefix` | `gw-v1` | Bump to invalidate all caches |
+| `cache-key-prefix` | `nr-v1` | Bump to invalidate all caches |
 | `purge-stale-caches` | `true` | Delete superseded caches (needs `actions: write`) |
 | `nrenv-token` | — | Override token for opening sysdep PRs (defaults to `NRENV_WRITE_TOKEN` env var) |
 

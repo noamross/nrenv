@@ -17,6 +17,7 @@ libfreetype6-dev
 libfribidi-dev
 libgdal-dev
 libgeos-dev
+libgit2-dev
 libglpk-dev
 libharfbuzz-dev
 libjpeg-dev
